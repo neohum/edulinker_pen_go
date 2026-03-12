@@ -125,7 +125,7 @@ func (a *App) applyMonitorConfig() {
 	}
 }
 
-//go:embed build/appicon.png
+//go:embed build/windows/icon.ico
 var trayIcon []byte
 
 // CheckForUpdate looks for newer versions on GitHub and asks user if they want to update.
