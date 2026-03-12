@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/blang/semver"
 	"github.com/energye/systray"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -134,7 +135,7 @@ func (a *App) CheckForUpdate(manual bool) {
 
 	fmt.Printf("[Update] Checking for updates on %s... (Current: %s)\n", slug, Version)
 
-	v := selfupdate.ParseVersion(Version)
+	v, _ := semver.Make(Version)
 	latest, err := selfupdate.UpdateSelf(v, slug)
 	if err != nil {
 		fmt.Println("[Update] Error checking for update:", err)

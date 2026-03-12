@@ -3,6 +3,7 @@ module edulinker-pen
 go 1.23
 
 require (
+	github.com/blang/semver v3.5.1+incompatible
 	github.com/energye/systray v1.0.3
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/wailsapp/wails/v2 v2.11.0
@@ -10,7 +11,6 @@ require (
 
 require (
 	github.com/bep/debounce v1.2.1 // indirect
-	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/golang/protobuf v1.3.2 // indirect

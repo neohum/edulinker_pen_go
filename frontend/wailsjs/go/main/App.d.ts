@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function CaptureScreen():Promise<string>;
 
+export function CheckForUpdate(arg1:boolean):Promise<void>;
+
 export function ClearClickArea():Promise<void>;
 
 export function CloseApp():Promise<void>;
