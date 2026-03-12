@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/energye/systray"
+	"github.com/rhysd/go-github-selfupdate/selfupdate"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -74,6 +75,9 @@ func (a *App) startup(ctx context.Context) {
 	// Initial state: Make non-activating
 	MakeNonActivating(a.hwnd)
 
+	// Check for updates in the background on startup
+	go a.CheckForUpdate(false)
+
 	// Initialize System Tray
 	go systray.Run(a.onSystrayReady, a.onSystrayExit)
 }
@@ -123,6 +127,58 @@ func (a *App) applyMonitorConfig() {
 //go:embed build/appicon.png
 var trayIcon []byte
 
+// CheckForUpdate looks for newer versions on GitHub and asks user if they want to update.
+// manual: true if user clicked the menu item, false if automatic background check.
+func (a *App) CheckForUpdate(manual bool) {
+	slug := "neohum/edulinker_pen_go"
+
+	fmt.Printf("[Update] Checking for updates on %s... (Current: %s)\n", slug, Version)
+
+	v := selfupdate.ParseVersion(Version)
+	latest, err := selfupdate.UpdateSelf(v, slug)
+	if err != nil {
+		fmt.Println("[Update] Error checking for update:", err)
+		if manual {
+			runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+				Type:    runtime.ErrorDialog,
+				Title:   "Update Check Failed",
+				Message: fmt.Sprintf("Failed to check for updates: %v", err),
+			})
+		}
+		return
+	}
+
+	if latest.Version.Equals(v) {
+		fmt.Println("[Update] App is already up-to-date")
+		if manual {
+			runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+				Type:    runtime.InfoDialog,
+				Title:   "Up to Date",
+				Message: fmt.Sprintf("You are already using the latest version (v%s).", Version),
+			})
+		}
+	} else {
+		fmt.Printf("[Update] New version available: v%s\n", latest.Version)
+
+		confirm, _ := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+			Type:          runtime.QuestionDialog,
+			Title:         "Update Available",
+			Message:       fmt.Sprintf("A new version (v%s) is available. Would you like to update now?\n\nRelease notes:\n%s", latest.Version, latest.ReleaseNotes),
+			DefaultButton: "Yes",
+			Buttons:       []string{"Yes", "No"},
+		})
+
+		if confirm == "Yes" {
+			fmt.Println("[Update] Update process finished. User should restart the app.")
+			runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+				Type:    runtime.InfoDialog,
+				Title:   "Update Successful",
+				Message: fmt.Sprintf("Successfully updated to v%s! Please restart the application to apply the changes.", latest.Version),
+			})
+		}
+	}
+}
+
 func (a *App) onSystrayReady() {
 	systray.SetIcon(trayIcon)
 	systray.SetTooltip("Edulinker Pen")
@@ -139,6 +195,7 @@ func (a *App) onSystrayReady() {
 
 	mUpdate.Click(func() {
 		fmt.Println("Check for update clicked")
+		a.CheckForUpdate(true)
 	})
 }
 

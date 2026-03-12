@@ -2,6 +2,7 @@
     import { createEventDispatcher, onMount } from "svelte";
     import { slide } from "svelte/transition";
     import { SetClickArea, ClearClickArea } from "../wailsjs/go/main/App.js";
+    import penIcon from "./assets/images/pen.png";
 
     const dispatch = createEventDispatcher();
 
@@ -230,7 +231,7 @@
             title="Click to {isExpanded ? 'collapse' : 'expand'}"
         >
             <img
-                src="/src/assets/images/pen.png"
+                src={penIcon}
                 alt="EduLinker Pen"
                 class="w-8 h-8 pointer-events-none"
             />
