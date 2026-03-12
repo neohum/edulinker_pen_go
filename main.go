@@ -13,7 +13,7 @@ import (
 var assets embed.FS
 
 // Version is the current version of the application
-const Version = "0.1.0"
+const Version = "0.1.1"
 
 func main() {
 	// Create an instance of the app structure
