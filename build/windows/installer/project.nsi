@@ -77,10 +77,18 @@ ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
    !insertmacro wails.checkArchitecture
+
+   ; Kill running instance before installing
+   nsExec::ExecToLog 'taskkill /F /IM "${PRODUCT_EXECUTABLE}"'
+   Sleep 1000
 FunctionEnd
 
 Section
     !insertmacro wails.setShellContext
+
+    ; Ensure the process is stopped before overwriting files
+    nsExec::ExecToLog 'taskkill /F /IM "${PRODUCT_EXECUTABLE}"'
+    Sleep 500
 
     !insertmacro wails.webview2runtime
 

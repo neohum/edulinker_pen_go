@@ -220,7 +220,7 @@
                     <h2 class="text-xl font-bold text-gray-800 mb-1">
                         EduLinker Pen
                     </h2>
-                    <p class="text-sm text-gray-400 mb-5">v0.1.3</p>
+                    <p class="text-sm text-gray-400 mb-5">v0.1.4</p>
 
                     <div class="bg-gray-50 rounded-xl p-5 text-left mb-5">
                         <p class="text-sm text-gray-600 leading-relaxed mb-4">
