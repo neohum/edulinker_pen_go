@@ -2,6 +2,10 @@ package main
 
 import (
 	"embed"
+	"fmt"
+	"os"
+	"syscall"
+	"unsafe"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -13,9 +17,19 @@ import (
 var assets embed.FS
 
 // Version is the current version of the application
-const Version = "0.1.2"
+const Version = "0.1.3"
 
 func main() {
+	// Single instance check using a named mutex
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	createMutex := kernel32.NewProc("CreateMutexW")
+	mutexName := syscall.StringToUTF16Ptr("EduLinkerPen_SingleInstance")
+	_, _, mutexErr := createMutex.Call(0, 0, uintptr(unsafe.Pointer(mutexName)))
+	if mutexErr != nil && mutexErr.(syscall.Errno) == 183 { // ERROR_ALREADY_EXISTS
+		fmt.Println("EduLinker Pen is already running.")
+		os.Exit(0)
+	}
+
 	// Create an instance of the app structure
 	app := NewApp()
 
