@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /d/works/edulinker-pen && dotnet build 2>&1)",
+      "Bash(\"/c/Program Files/dotnet/dotnet.exe\" build:*)",
+      "Bash(\"/c/Program Files/dotnet/dotnet.exe\" publish:*)",
+      "Bash(rm -rf /d/works/edulinker-pen/publish && \"/c/Program Files/dotnet/dotnet.exe\" publish /d/works/edulinker-pen/EdulinkerPen.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o /d/works/edulinker-pen/publish 2>&1)",
+      "Bash(\"/c/Program Files/dotnet/dotnet.exe\" restore /d/works/edulinker-pen/EdulinkerPen.csproj -r win-x64 2>&1 && \"/c/Program Files/dotnet/dotnet.exe\" publish /d/works/edulinker-pen/EdulinkerPen.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o /d/works/edulinker-pen/publish 2>&1)",
+      "Bash(rm -rf /d/works/edulinker-pen/publish && \"/c/Program Files/dotnet/dotnet.exe\" publish /d/works/edulinker-pen/EdulinkerPen.csproj -c Release -r win-x64 --self-contained true -o /d/works/edulinker-pen/publish 2>&1)",
+      "Bash(taskkill //F //IM EdulinkerPen.exe 2>&1 && \"/c/Program Files/dotnet/dotnet.exe\" build /d/works/edulinker-pen/EdulinkerPen.csproj 2>&1)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/dotnet\" && dotnet build \"D:\\\\works\\\\edulinker-pen\\\\EdulinkerPen.csproj\" 2>&1)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/dotnet\" && dotnet build \"D:\\\\works\\\\edulinker-pen\\\\EdulinkerPen.csproj\" -o \"D:\\\\works\\\\edulinker-pen\\\\bin\\\\BuildTest\" 2>&1)",
+      "Bash(git config:*)",
+      "Bash(cd:*)",
+      "Bash(cd /d/works/edulinker-pen && git branch -M main && git push -u origin main 2>&1)",
+      "Bash(echo No EdulinkerPen process running:*)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/dotnet\" && dotnet clean \"D:\\\\works\\\\edulinker-pen\\\\EdulinkerPen.csproj\" -o \"D:\\\\works\\\\edulinker-pen\\\\bin\\\\Debug\\\\net8.0-windows\" 2>&1 && dotnet build \"D:\\\\works\\\\edulinker-pen\\\\EdulinkerPen.csproj\" 2>&1)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/dotnet\" && dotnet run --project \"D:\\\\works\\\\edulinker-pen\\\\EdulinkerPen.csproj\" 2>&1)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/dotnet\" && dotnet build \"D:\\\\works\\\\edulinker-pen\\\\EdulinkerPen.csproj\" 2>&1 && dotnet run --project \"D:\\\\works\\\\edulinker-pen\\\\EdulinkerPen.csproj\" 2>&1)",
+      "Bash(taskkill:*)",
+      "Bash(cd /d/works/edulinker-pen && git push origin main 2>&1)",
+      "Bash(cd /d/works/edulinker-pen && tasklist | grep -i edulinker 2>/dev/null)",
+      "Bash(cd /d/works/edulinker-pen && \"/c/Program Files/dotnet/dotnet.exe\" build -o bin/BuildTest 2>&1)",
+      "Bash(tasklist | grep -i edulinker 2>/dev/null)",
+      "Bash(tasklist | grep -i edulinker 2>/dev/null && taskkill //IM EdulinkerPen.exe //F 2>/dev/null; cd /d/works/edulinker-pen && \"/c/Program Files/dotnet/dotnet.exe\" build 2>&1)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/dotnet\" && cd /d/works/edulinker-pen && dotnet build 2>&1)",
+      "Bash(cd /d/works/edulinker-pen && export PATH=\"$PATH:/c/Program Files/dotnet\" && dotnet build 2>&1)",
+      "Bash(cmd.exe:*)",
+      "Bash(taskkill.exe:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(scoop install:*)",
+      "Bash(iscc:*)",
+      "Bash(cd D:/works/edulinker-pen && gh release list --limit 5 2>&1)",
+      "Bash(cd D:/works/edulinker-pen && gh auth login -h github.com -p https -w 2>&1)",
+      "Bash(cd D:/works/edulinker-pen && gh release create v1.0.0 \\\\\n  \"installer/EdulinkerPen-Setup.exe\" \\\\\n  --title \"Edulinker-Pen v1.0.0\" \\\\\n  --notes \"$\\(cat <<'EOF'\n## Edulinker-Pen v1.0.0\n\n투명 오버레이 드로잉 앱 첫 릴리스입니다.\n\n### 주요 기능\n- 펜 / 형광펜 / 지우개 도구\n- 매직펜 \\(벚꽃, 별빛 파티클 효과\\)\n- 6색 색상 팔레트 \\(팝업\\)\n- 브러시 굵기 조절\n- 배경 전환 \\(투명/흰색/검정\\)\n- 세로/가로/둘다 레이아웃 전환 \\(설정 버튼\\)\n- 멀티터치 지원\n- 자동 업데이트\n\n### 설치\n`EdulinkerPen-Setup.exe`를 다운로드하여 실행하세요.\n.NET 런타임이 포함되어 있어 별도 설치가 필요 없습니다.\nEOF\n\\)\" 2>&1)"
+    ]
+  }
+}
