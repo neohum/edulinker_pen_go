@@ -140,12 +140,17 @@
         if (!isDragging) return;
         isDragging = false;
 
-        // Click detection: if it was from the handle and didn't move much
-        if (isDragOriginHandle && !hasDragged) {
+        // Apply the new position to the window region after dragging
+        if (!isExpanded) {
+            SetClickArea(currentPos.x - 16, currentPos.y - 16, 80, 80);
+        }
+    }
+
+    // Handles the explicitly intent-based clicks/taps on the main handle
+    function handleIconClick(e: MouseEvent | TouchEvent) {
+        // Only toggle if not dragged significantly
+        if (!hasDragged) {
             toggleExpand();
-        } else if (!isExpanded) {
-            // Apply the new position to the window region after dragging
-            SetClickArea(currentPos.x - 10, currentPos.y - 10, 70, 70);
         }
     }
 
@@ -156,7 +161,7 @@
         if (!isExpanded) {
             closeAllMenus();
             // Wait a tiny bit for the animation to start/finish, or just clip immediately
-            SetClickArea(currentPos.x - 10, currentPos.y - 10, 70, 70);
+            SetClickArea(currentPos.x - 16, currentPos.y - 16, 80, 80);
         } else {
             ClearClickArea();
         }
@@ -171,7 +176,7 @@
     onMount(() => {
         // Init state
         if (!isExpanded) {
-            SetClickArea(currentPos.x - 10, currentPos.y - 10, 70, 70);
+            SetClickArea(currentPos.x - 16, currentPos.y - 16, 80, 80);
         } else {
             ClearClickArea();
         }
@@ -240,9 +245,17 @@
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
-            class="absolute inset-0 cursor-pointer z-20 drag-handle"
+            class="absolute {isExpanded
+                ? '-inset-1'
+                : '-inset-4'} cursor-pointer z-20 drag-handle"
+            style="touch-action: none;"
             on:mousedown={handleDragStart}
             on:touchstart={handleDragStart}
+            on:click={handleIconClick}
+            on:touchend|preventDefault={(e) => {
+                handleDragEnd(e);
+                handleIconClick(e);
+            }}
         ></div>
     </div>
 
