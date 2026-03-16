@@ -77,7 +77,23 @@ func (a *App) startup(ctx context.Context) {
 	MakeNonActivating(a.hwnd)
 
 	// Check for updates in the background on startup
-	go a.CheckForUpdate(false)
+	go func() {
+		// Initial check
+		a.CheckForUpdate(false)
+
+		// Set up a ticker to check every 6 hours
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-a.ctx.Done():
+				return // Context canceled, stop goroutine
+			case <-ticker.C:
+				a.CheckForUpdate(false)
+			}
+		}
+	}()
 
 	// Initialize System Tray
 	go systray.Run(a.onSystrayReady, a.onSystrayExit)
@@ -289,4 +305,9 @@ func (a *App) CloseApp() {
 // Greet returns a greeting for the given name (Keep for testing the bridge)
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
+}
+
+// GetVersion returns the current version of the application
+func (a *App) GetVersion() string {
+	return Version
 }

@@ -53,8 +53,8 @@
   let lastSpawnPos = { x: 0, y: 0 };
 
   function handlePointerDown(e: PointerEvent) {
-    if (activeTool === "actionpen") {
-      actionEffects?.spawnObjectAt(e.clientX, e.clientY);
+    if (["actionpen", "firework", "confetti"].includes(activeTool)) {
+      actionEffects?.spawnObjectAt(e.clientX, e.clientY, activeTool);
       lastSpawnPos = { x: e.clientX, y: e.clientY };
     }
     if (inkManager) {
@@ -64,13 +64,16 @@
   }
 
   function handlePointerMove(e: PointerEvent) {
-    if (activeTool === "actionpen" && e.buttons > 0) {
+    if (
+      ["actionpen", "firework", "confetti"].includes(activeTool) &&
+      e.buttons > 0
+    ) {
       const dist = Math.hypot(
         e.clientX - lastSpawnPos.x,
         e.clientY - lastSpawnPos.y,
       );
       if (dist > 30) {
-        actionEffects?.spawnObjectAt(e.clientX, e.clientY);
+        actionEffects?.spawnObjectAt(e.clientX, e.clientY, activeTool);
         lastSpawnPos = { x: e.clientX, y: e.clientY };
       }
     }
@@ -89,7 +92,7 @@
   function handleToolChange(e: CustomEvent<string>) {
     if (!inkManager) return;
     activeTool = e.detail;
-    if (activeTool === "pen") {
+    if (["pen", "actionpen", "firework", "confetti"].includes(activeTool)) {
       inkManager.isEraser = false;
       inkManager.isHighlighter = false;
       inkManager.color = penColor;

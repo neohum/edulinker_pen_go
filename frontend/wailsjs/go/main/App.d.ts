@@ -18,6 +18,8 @@ export function GetMonitors():Promise<Array<main.MonitorInfo>>;
 
 export function GetSavedMonitorIndex():Promise<number>;
 
+export function GetVersion():Promise<string>;
+
 export function Greet(arg1:string):Promise<string>;
 
 export function SetClickArea(arg1:number,arg2:number,arg3:number,arg4:number):Promise<void>;

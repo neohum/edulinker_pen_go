@@ -26,7 +26,7 @@
 
     // Define physical object state
     interface FloatingItem {
-        mesh: THREE.Group;
+        mesh: THREE.Group | THREE.Mesh;
         vx: number;
         vy: number;
         vz: number;
@@ -36,6 +36,7 @@
         scaleTarget: number;
         life: number;
         maxLife: number;
+        type?: string;
     }
 
     let activeItems: FloatingItem[] = [];
@@ -117,7 +118,20 @@
     }
 
     // EXPORTED FUNCTION: Call this from App.svelte when the action pen is dragged
-    export function spawnObjectAt(clientX: number, clientY: number) {
+    export function spawnObjectAt(
+        clientX: number,
+        clientY: number,
+        toolType: string = "actionpen",
+    ) {
+        if (toolType === "firework") {
+            spawnFirework(clientX, clientY);
+            return;
+        }
+        if (toolType === "confetti") {
+            spawnConfetti(clientX, clientY);
+            return;
+        }
+
         console.log(
             "[ActionEffects] spawnObjectAt called:",
             clientX,
@@ -183,6 +197,87 @@
         }
     }
 
+    function spawnFirework(clientX: number, clientY: number) {
+        const worldX = clientX - window.innerWidth / 2;
+        const worldY = -(clientY - window.innerHeight / 2);
+
+        const colors = [0xffd700, 0xff4500, 0x00ff00, 0x1e90ff, 0xff1493];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+
+        const numParticles = 15 + Math.floor(Math.random() * 10);
+        for (let i = 0; i < numParticles; i++) {
+            const geo = new THREE.SphereGeometry(1, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({
+                color,
+                transparent: true,
+                opacity: 1,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+
+            mesh.position.set(worldX, worldY, 0);
+            scene.add(mesh);
+
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 5 + Math.random() * 8;
+
+            activeItems.push({
+                mesh,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                vz: (Math.random() - 0.5) * 5,
+                rx: 0,
+                ry: 0,
+                rz: 0,
+                scaleTarget: 4 + Math.random() * 4,
+                life: 0,
+                maxLife: 40 + Math.random() * 20,
+                type: "firework",
+            });
+        }
+    }
+
+    function spawnConfetti(clientX: number, clientY: number) {
+        const worldX = clientX - window.innerWidth / 2;
+        const worldY = -(clientY - window.innerHeight / 2);
+
+        const colors = [
+            0xff6b6b, 0xffa502, 0x2ed573, 0x1e90ff, 0xeccc68, 0xa29bfe,
+            0xfd79a8,
+        ];
+
+        const numPieces = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < numPieces; i++) {
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const geo = new THREE.PlaneGeometry(6, 3);
+            const mat = new THREE.MeshBasicMaterial({
+                color,
+                side: THREE.DoubleSide,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+
+            mesh.position.set(
+                worldX + (Math.random() - 0.5) * 20,
+                worldY + (Math.random() - 0.5) * 20,
+                0,
+            );
+            scene.add(mesh);
+
+            activeItems.push({
+                mesh,
+                vx: (Math.random() - 0.5) * 4,
+                vy: Math.random() * 3 + 2,
+                vz: (Math.random() - 0.5) * 2,
+                rx: Math.random() * 0.2,
+                ry: Math.random() * 0.2,
+                rz: Math.random() * 0.2,
+                scaleTarget: Math.random() * 4 + 2,
+                life: 0,
+                maxLife: 100 + Math.random() * 50,
+                type: "confetti",
+            });
+        }
+    }
+
     // Fallback: spawn a simple colored cube when GLBs are unavailable
     function spawnFallbackCube(clientX: number, clientY: number) {
         const worldX = clientX - window.innerWidth / 2;
@@ -219,6 +314,7 @@
             scaleTarget: targetScale,
             life: 0,
             maxLife: 120 + Math.random() * 60,
+            type: "actionpen",
         };
         activeItems.push(newItem);
     }
@@ -257,6 +353,7 @@
             scaleTarget: targetScale,
             life: 0,
             maxLife: 120 + Math.random() * 60, // Frames before disappearing
+            type: "actionpen",
         };
 
         activeItems.push(newItem);
@@ -275,31 +372,60 @@
             const item = activeItems[i];
             item.life++;
 
-            // Pop-in scale animation (Spring-like)
-            const curScale = item.mesh.scale.x;
-            const diff = item.scaleTarget - curScale;
-            if (item.life < 20) {
-                // Quickly scale up
-                const newScale = curScale + diff * 0.25;
-                item.mesh.scale.set(newScale, newScale, newScale);
-            } else if (item.life > item.maxLife - 20) {
-                // Shrink before dying
-                const shrinkScale = Math.max(0.01, curScale * 0.85);
-                item.mesh.scale.set(shrinkScale, shrinkScale, shrinkScale);
+            // Physics and Animation based on type
+            if (item.type === "firework") {
+                item.vy -= 0.2;
+                item.vx *= 0.92;
+                item.vy *= 0.92;
+                item.vz *= 0.92;
+
+                const mat = (item.mesh as THREE.Mesh)
+                    .material as THREE.Material;
+                if (mat && "opacity" in mat) {
+                    mat.opacity = 1 - item.life / item.maxLife;
+                }
+
+                if (item.life < 5) {
+                    const s = item.scaleTarget * (item.life / 5);
+                    item.mesh.scale.set(s, s, s);
+                }
+            } else if (item.type === "confetti") {
+                item.vy -= 0.05;
+                item.vx += (Math.random() - 0.5) * 0.5;
+                item.vx *= 0.95;
+                item.vy *= 0.95;
+                item.vz *= 0.95;
+
+                if (item.life < 10) {
+                    const s = item.scaleTarget * (item.life / 10);
+                    item.mesh.scale.set(s, s, s);
+                }
+            } else {
+                const curScale = item.mesh.scale.x;
+                const diff = item.scaleTarget - curScale;
+                if (item.life < 20) {
+                    // Quickly scale up
+                    const newScale = curScale + diff * 0.25;
+                    item.mesh.scale.set(newScale, newScale, newScale);
+                } else if (item.life > item.maxLife - 20) {
+                    // Shrink before dying
+                    const shrinkScale = Math.max(0.01, curScale * 0.85);
+                    item.mesh.scale.set(shrinkScale, shrinkScale, shrinkScale);
+                }
+
+                // Add a bit of downward gravity
+                item.vy -= 0.12;
+
+                // Air friction (drag)
+                item.vx *= 0.98;
+                item.vy *= 0.99;
+                item.vz *= 0.98;
             }
 
             // Apply velocities (Gravity effect + drag)
             item.mesh.position.x += item.vx;
             item.mesh.position.y += item.vy;
             item.mesh.position.z += item.vz;
-
-            // Add a bit of downward gravity
-            item.vy -= 0.12;
-
-            // Air friction (drag)
-            item.vx *= 0.98;
-            item.vy *= 0.99;
-            item.vz *= 0.98;
 
             // Apply rotations
             item.mesh.rotation.x += item.rx;

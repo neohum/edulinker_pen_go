@@ -179,10 +179,15 @@ func EnumerateMonitors() []MonitorInfo {
 		var info MONITORINFOEX
 		info.Size = uint32(unsafe.Sizeof(info))
 
+		// Get rect from lpRect fallback
+		rect := *(*RECT)(unsafe.Pointer(lpRect))
+
 		ret, _, _ := procGetMonitorInfo.Call(hMonitor, uintptr(unsafe.Pointer(&info)))
+
+		var mi MonitorInfo
 		if ret != 0 {
 			deviceName := syscall.UTF16ToString(info.Device[:])
-			mi := MonitorInfo{
+			mi = MonitorInfo{
 				Index:     idx,
 				Name:      fmt.Sprintf("모니터 %d (%s)", idx+1, deviceName),
 				X:         int(info.Monitor.Left),
@@ -191,13 +196,52 @@ func EnumerateMonitors() []MonitorInfo {
 				Height:    int(info.Monitor.Bottom - info.Monitor.Top),
 				IsPrimary: info.Flags&MONITORINFOF_PRIMARY != 0,
 			}
+		} else {
+			// Fallback if GetMonitorInfoW fails for some reason
+			mi = MonitorInfo{
+				Index:     idx,
+				Name:      fmt.Sprintf("모니터 %d (알 수 없음)", idx+1),
+				X:         int(rect.Left),
+				Y:         int(rect.Top),
+				Width:     int(rect.Right - rect.Left),
+				Height:    int(rect.Bottom - rect.Top),
+				IsPrimary: (rect.Left == 0 && rect.Top == 0), // Best guess
+			}
+			fmt.Printf("[Win32] GetMonitorInfoW failed for monitor %d, using fallback rect\n", idx)
+		}
+
+		// Sanity check dimensions — Windows sometimes returns weird zero-width rects
+		if mi.Width > 0 && mi.Height > 0 {
 			monitors = append(monitors, mi)
 			idx++
+		} else {
+			fmt.Printf("[Win32] Skipping invalid monitor %d with size %dx%d\n", idx, mi.Width, mi.Height)
 		}
+
 		return 1 // Continue enumeration
 	})
 
 	procEnumDisplayMonitors.Call(0, 0, cb, 0)
+
+	// Ultimate Fallback if EnumDisplayMonitors returns nothing (e.g. headless/RDP issues)
+	if len(monitors) == 0 {
+		fmt.Println("[Win32] No monitors found via EnumDisplayMonitors, falling back to SystemMetrics virtual screen")
+		x, _, _ := procGetSystemMetrics.Call(SM_XVIRTUALSCREEN)
+		y, _, _ := procGetSystemMetrics.Call(SM_YVIRTUALSCREEN)
+		w, _, _ := procGetSystemMetrics.Call(SM_CXVIRTUALSCREEN)
+		h, _, _ := procGetSystemMetrics.Call(SM_CYVIRTUALSCREEN)
+
+		monitors = append(monitors, MonitorInfo{
+			Index:     0,
+			Name:      "기본 모니터 (가상 통합)",
+			X:         int(x),
+			Y:         int(y),
+			Width:     int(w),
+			Height:    int(h),
+			IsPrimary: true,
+		})
+	}
+
 	return monitors
 }
 
