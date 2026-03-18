@@ -5,6 +5,7 @@
   import ActionEffects from "./ActionEffects.svelte";
   import SetupDialog from "./SetupDialog.svelte";
   import CaptureOverlay from "./CaptureOverlay.svelte";
+  import UpdateToast from "./UpdateToast.svelte";
   import { GetSavedMonitorIndex } from "../wailsjs/go/main/App.js";
 
   let mainCanvas: HTMLCanvasElement;
@@ -222,10 +223,10 @@
 {/if}
 
 <main
-  class="w-full h-full relative overflow-hidden transition-colors duration-300 {isExpanded
-    ? 'pointer-events-auto'
+  class="w-full h-full relative overflow-hidden {isExpanded
+    ? 'transition-colors duration-300 pointer-events-auto'
     : 'pointer-events-none'}"
-  style="background-color: {canvasBgColor};"
+  style="background-color: {isExpanded ? canvasBgColor : 'transparent'};"
 >
   {#if capturedImage}
     <!-- Image layer: BEHIND the canvas so pen draws over it -->
@@ -318,6 +319,8 @@
   {#if showSetup}
     <SetupDialog on:close={() => (showSetup = false)} />
   {/if}
+
+  <UpdateToast />
 </main>
 
 <style>

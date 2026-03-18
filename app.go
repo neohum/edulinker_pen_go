@@ -10,15 +10,20 @@ import (
 	"syscall"
 	"time"
 
+	"io"
+	"net/http"
+	"os/exec"
+
 	"github.com/blang/semver"
 	"github.com/energye/systray"
-	"github.com/rhysd/go-github-selfupdate/selfupdate"
+	"github.com/google/go-github/v60/github"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // AppConfig stores persistent user settings.
 type AppConfig struct {
-	MonitorIndex int `json:"monitorIndex"` // -1 = all monitors, 0+ = specific monitor index
+	MonitorIndex   int    `json:"monitorIndex"` // -1 = all monitors, 0+ = specific monitor index
+	updateFilePath string `json:"-"`            // Path to the downloaded installer, kept in memory only
 }
 
 // App struct
@@ -147,12 +152,13 @@ var trayIcon []byte
 // CheckForUpdate looks for newer versions on GitHub and asks user if they want to update.
 // manual: true if user clicked the menu item, false if automatic background check.
 func (a *App) CheckForUpdate(manual bool) {
-	slug := "neohum/edulinker_pen_go"
+	owner := "neohum"
+	repo := "edulinker_pen_go"
 
-	fmt.Printf("[Update] Checking for updates on %s... (Current: %s)\n", slug, Version)
+	fmt.Printf("[Update] Checking for updates on %s/%s... (Current: %s)\n", owner, repo, Version)
 
-	v, _ := semver.Make(Version)
-	latest, err := selfupdate.UpdateSelf(v, slug)
+	client := github.NewClient(nil)
+	release, _, err := client.Repositories.GetLatestRelease(context.Background(), owner, repo)
 	if err != nil {
 		fmt.Println("[Update] Error checking for update:", err)
 		if manual {
@@ -165,7 +171,24 @@ func (a *App) CheckForUpdate(manual bool) {
 		return
 	}
 
-	if latest.Version.Equals(v) {
+	latestVersionStr := release.GetTagName()
+	if latestVersionStr != "" && latestVersionStr[0] == 'v' {
+		latestVersionStr = latestVersionStr[1:]
+	}
+
+	currentVer, err := semver.Make(Version)
+	if err != nil {
+		fmt.Println("[Update] Invalid current version format:", err)
+		return
+	}
+
+	latestVer, err := semver.Make(latestVersionStr)
+	if err != nil {
+		fmt.Println("[Update] Invalid remote version format:", err)
+		return
+	}
+
+	if latestVer.LTE(currentVer) {
 		fmt.Println("[Update] App is already up-to-date")
 		if manual {
 			runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
@@ -174,26 +197,124 @@ func (a *App) CheckForUpdate(manual bool) {
 				Message: fmt.Sprintf("You are already using the latest version (v%s).", Version),
 			})
 		}
-	} else {
-		fmt.Printf("[Update] New version available: v%s\n", latest.Version)
+		return
+	}
 
-		confirm, _ := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-			Type:          runtime.QuestionDialog,
-			Title:         "Update Available",
-			Message:       fmt.Sprintf("A new version (v%s) is available. Would you like to update now?\n\nRelease notes:\n%s", latest.Version, latest.ReleaseNotes),
-			DefaultButton: "Yes",
-			Buttons:       []string{"Yes", "No"},
-		})
+	fmt.Printf("[Update] New version available: v%s\n", latestVer.String())
 
-		if confirm == "Yes" {
-			fmt.Println("[Update] Update process finished. User should restart the app.")
-			runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-				Type:    runtime.InfoDialog,
-				Title:   "Update Successful",
-				Message: fmt.Sprintf("Successfully updated to v%s! Please restart the application to apply the changes.", latest.Version),
-			})
+	// Emit event to frontend instead of prompting via MessageDialog
+	runtime.EventsEmit(a.ctx, "update-status", map[string]string{
+		"status":  "available",
+		"version": latestVer.String(),
+		"notes":   release.GetBody(),
+	})
+
+	// Automatically start downloading in background
+	go a.downloadAndInstallUpdate(release)
+}
+
+func (a *App) downloadAndInstallUpdate(release *github.RepositoryRelease) {
+	var installerAsset *github.ReleaseAsset
+	for _, asset := range release.Assets {
+		// Look for the installer specifically
+		if filepath.Ext(asset.GetName()) == ".exe" {
+			installerAsset = asset
+			break // in our case, there is usually only one .exe asset
 		}
 	}
+
+	if installerAsset == nil {
+		runtime.EventsEmit(a.ctx, "update-status", map[string]string{
+			"status": "error",
+			"error":  "No installer executable found in the release.",
+		})
+		return
+	}
+
+	downloadUrl := installerAsset.GetBrowserDownloadURL()
+	fmt.Printf("[Update] Downloading installer silently: %s\n", downloadUrl)
+
+	runtime.EventsEmit(a.ctx, "update-status", map[string]string{
+		"status": "downloading",
+	})
+
+	// Create temp file for the installer
+	tempDir := os.TempDir()
+	tempFilePath := filepath.Join(tempDir, assetName(installerAsset))
+
+	// Download the installer in the background
+	err := downloadFile(tempFilePath, downloadUrl)
+	if err != nil {
+		fmt.Printf("[Update] Error downloading installer: %v\n", err)
+		runtime.EventsEmit(a.ctx, "update-status", map[string]string{
+			"status": "error",
+			"error":  fmt.Sprintf("Failed to download the update: %v", err),
+		})
+		return
+	}
+
+	fmt.Printf("[Update] Download complete: %s\n", tempFilePath)
+
+	// Save the temp file path so the UI can trigger it later
+	a.config.updateFilePath = tempFilePath
+
+	// Notify frontend that update is ready to install silently
+	runtime.EventsEmit(a.ctx, "update-status", map[string]string{
+		"status": "ready",
+	})
+}
+
+// InstallUpdate executes the previously downloaded update installer silently and restarts the app.
+// It should be called from the frontend when the user clicks 'Restart to update'.
+func (a *App) InstallUpdate() {
+	if a.config.updateFilePath == "" {
+		fmt.Println("[Update] No update file available to install.")
+		return
+	}
+
+	fmt.Println("[Update] Launching silent installer...", a.config.updateFilePath)
+	cmd := exec.Command(a.config.updateFilePath, "/S")
+	err := cmd.Start()
+	if err != nil {
+		fmt.Printf("[Update] Failed to start silent installer: %v\n", err)
+		runtime.EventsEmit(a.ctx, "update-status", map[string]string{
+			"status": "error",
+			"error":  fmt.Sprintf("Failed to launch the update installer: %v", err),
+		})
+		return
+	}
+
+	// Exit our application so the installer can overwrite the files
+	os.Exit(0)
+}
+
+func assetName(asset *github.ReleaseAsset) string {
+	if asset.Name != nil {
+		return *asset.Name
+	}
+	return "edulinker-pen-setup.exe"
+}
+
+// downloadFile downloads a URL to a local file
+func downloadFile(filepath string, url string) error {
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	_, err = io.Copy(out, resp.Body)
+	return err
 }
 
 func (a *App) onSystrayReady() {

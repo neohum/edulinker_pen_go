@@ -22,6 +22,8 @@ export function GetVersion():Promise<string>;
 
 export function Greet(arg1:string):Promise<string>;
 
+export function InstallUpdate():Promise<void>;
+
 export function SetClickArea(arg1:number,arg2:number,arg3:number,arg4:number):Promise<void>;
 
 export function SetMonitor(arg1:number):Promise<void>;

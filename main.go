@@ -17,7 +17,7 @@ import (
 var assets embed.FS
 
 // Version is the current version of the application
-const Version = "0.1.6"
+const Version = "0.1.0"
 
 func main() {
 	// Single instance check using a named mutex
