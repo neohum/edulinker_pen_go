@@ -44,7 +44,9 @@
       "Bash(tools/inkrecognize/bin/Release/net8.0-windows10.0.19041.0/win-x64/publish/inkrecognize.exe)",
       "Bash(tools/inkrecognize/bin/Release/net8.0-windows10.0.19041.0/win-x64/publish/inkrecognize.exe --diagnose)",
       "Bash(tools/inkrecognize/bin/Release/net8.0-windows10.0.19041.0/win-x64/publish/inkrecognize.exe --lang ko-KR)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
