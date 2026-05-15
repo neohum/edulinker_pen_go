@@ -96,6 +96,27 @@ Section
 
     !insertmacro wails.files
 
+    ; Bundle the WinRT-based handwriting recognition helper next to the main exe.
+    ; Built ahead of time via:  cd tools\inkrecognize && dotnet publish -c Release
+    File "..\..\..\tools\inkrecognize\bin\Release\net8.0-windows10.0.19041.0\win-x64\publish\inkrecognize.exe"
+
+    ; Install Korean + English handwriting recognizers via Windows Update.
+    ; This requires internet and admin (the installer is already elevated).
+    ; The script writes its progress to the install detail view; the install
+    ; continues regardless of the result so the app still installs even if
+    ; Windows Update is unreachable.
+    File "/oname=install_handwriting.ps1" "..\install_handwriting.ps1"
+    DetailPrint "----------------------------------------"
+    DetailPrint "Installing handwriting recognizers (Korean + English)..."
+    DetailPrint "Requires internet — may take 30-60 seconds."
+    nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\install_handwriting.ps1"'
+    Pop $0
+    StrCmp $0 "0" handwriting_done 0
+        DetailPrint "Handwriting recognizer install reported issues (exit=$0). The app will still work for shapes; for handwriting, see the message above or Windows Settings -> Language."
+    handwriting_done:
+    Delete "$INSTDIR\install_handwriting.ps1"
+    DetailPrint "----------------------------------------"
+
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 

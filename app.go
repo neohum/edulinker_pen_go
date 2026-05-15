@@ -432,3 +432,26 @@ func (a *App) Greet(name string) string {
 func (a *App) GetVersion() string {
 	return Version
 }
+
+// RecognizeInk runs the Windows Ink handwriting recognizer over the given strokes
+// and returns a JSON string with { candidates[], recognizer, x, y, w, h }.
+// strokesJSON: [{"points":[{"x":12,"y":34},...]}, ...]
+// langHint:    BCP-47 (e.g., "ko-KR", "en-US"); empty string = use the first
+//              installed recognizer.
+func (a *App) RecognizeInk(strokesJSON string, langHint string) (string, error) {
+	return RecognizeInkRaw(strokesJSON, langHint)
+}
+
+// DiagnoseInk runs the helper in --diagnose mode and returns its stdout
+// (a human-readable list of installed recognizers). For UI debugging.
+func (a *App) DiagnoseInk() (string, error) {
+	exe, err := findInkExe()
+	if err != nil {
+		return "", err
+	}
+	out, err := runInkDiagnose(exe)
+	if err != nil {
+		return out, err
+	}
+	return out, nil
+}

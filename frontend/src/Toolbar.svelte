@@ -11,6 +11,7 @@
     export let highlighterColor = "#FFFF00";
     export let brushSize = 4;
     export let isExpanded = true;
+    export let isRecognizing = false;
 
     // Computed propery for current tool color
     $: currentColor =
@@ -311,6 +312,13 @@
                             <polygon
                                 points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
                             ></polygon>
+                        {:else if activeTool === "shapepen"}
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <circle cx="12" cy="12" r="4" />
+                        {:else if activeTool === "textpen"}
+                            <path d="M4 7V5h16v2" />
+                            <path d="M9 20h6" />
+                            <path d="M12 5v15" />
                         {:else if activeTool === "firework"}
                             <path
                                 d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"
@@ -474,6 +482,63 @@
                                 >꽃가루 펜</span
                             >
                         </button>
+                        <button
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {activeTool ===
+                            'shapepen'
+                                ? 'bg-[#1ABC9C]/20 border-[#1ABC9C]/60'
+                                : 'bg-[#1ABC9C]/10 border-[#1ABC9C]/25 hover:bg-[#1ABC9C]/20'}"
+                            on:click={() => {
+                                selectTool("shapepen");
+                                showPenMenu = false;
+                            }}
+                            title="도형 펜 (그린 도형을 자동 인식)"
+                        >
+                            <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="#333333"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="12" cy="12" r="4" />
+                            </svg>
+                            <span class="text-sm font-medium whitespace-nowrap"
+                                >도형 펜</span
+                            >
+                        </button>
+                        <button
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {activeTool ===
+                            'textpen'
+                                ? 'bg-[#3498DB]/20 border-[#3498DB]/60'
+                                : 'bg-[#3498DB]/10 border-[#3498DB]/25 hover:bg-[#3498DB]/20'}"
+                            on:click={() => {
+                                selectTool("textpen");
+                                showPenMenu = false;
+                            }}
+                            title="글씨 펜 (손글씨를 텍스트로 변환)"
+                        >
+                            <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="#333333"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path d="M4 7V5h16v2" />
+                                <path d="M9 20h6" />
+                                <path d="M12 5v15" />
+                            </svg>
+                            <span class="text-sm font-medium whitespace-nowrap"
+                                >글씨 펜</span
+                            >
+                        </button>
                     </div>
                 {/if}
             </div>
@@ -509,6 +574,7 @@
                     ? 'bg-[#4A90E2]/20 border-[#4A90E2]/60 border-[1.5px]'
                     : 'bg-[#4A90E2]/10 border-[#4A90E2]/25 hover:bg-[#4A90E2]/20'}"
                 on:click={() => selectTool("eraser")}
+                title="지우개 (잉크 지우기)"
             >
                 <svg
                     width="22"
@@ -525,6 +591,60 @@
                     /><path d="m5.082 11.09 8.828 8.828" />
                 </svg>
             </button>
+
+            <!-- Selector Button -->
+            <button
+                class="w-11 h-11 shrink-0 rounded-lg border flex items-center justify-center transition-all {activeTool ===
+                'selector'
+                    ? 'bg-[#4A90E2]/20 border-[#4A90E2]/60 border-[1.5px]'
+                    : 'bg-[#4A90E2]/10 border-[#4A90E2]/25 hover:bg-[#4A90E2]/20'}"
+                on:click={() => selectTool("selector")}
+                title="선택 (객체 삭제)"
+            >
+                <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#333333"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                >
+                    <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+                    <path d="M13 13l6 6" />
+                </svg>
+            </button>
+
+            <!-- Convert handwriting -> text (only when text pen is active) -->
+            {#if activeTool === "textpen"}
+                <button
+                    class="w-11 h-11 shrink-0 rounded-lg border flex items-center justify-center transition-all bg-[#3498DB]/20 border-[#3498DB]/60 hover:bg-[#3498DB]/30 disabled:opacity-50 disabled:cursor-wait"
+                    on:click={() => dispatch("convertText")}
+                    disabled={isRecognizing}
+                    title="손글씨 → 텍스트 변환"
+                >
+                    {#if isRecognizing}
+                        <svg
+                            class="animate-spin"
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="#1F6FB2"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                        >
+                            <path d="M12 2a10 10 0 0 1 10 10" />
+                        </svg>
+                    {:else}
+                        <span
+                            class="text-[#1F6FB2] font-bold text-base leading-none"
+                            >T<span class="text-xs">↵</span></span
+                        >
+                    {/if}
+                </button>
+            {/if}
 
             <!-- Clear All -->
             <button

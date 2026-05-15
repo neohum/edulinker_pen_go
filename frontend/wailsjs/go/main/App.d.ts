@@ -10,6 +10,8 @@ export function ClearClickArea():Promise<void>;
 
 export function CloseApp():Promise<void>;
 
+export function DiagnoseInk():Promise<string>;
+
 export function DisableClickThrough():Promise<void>;
 
 export function EnableClickThrough():Promise<void>;
@@ -23,6 +25,8 @@ export function GetVersion():Promise<string>;
 export function Greet(arg1:string):Promise<string>;
 
 export function InstallUpdate():Promise<void>;
+
+export function RecognizeInk(arg1:string,arg2:string):Promise<string>;
 
 export function SetClickArea(arg1:number,arg2:number,arg3:number,arg4:number):Promise<void>;
 

@@ -18,6 +18,10 @@ export function CloseApp() {
   return window['go']['main']['App']['CloseApp']();
 }
 
+export function DiagnoseInk() {
+  return window['go']['main']['App']['DiagnoseInk']();
+}
+
 export function DisableClickThrough() {
   return window['go']['main']['App']['DisableClickThrough']();
 }
@@ -44,6 +48,10 @@ export function Greet(arg1) {
 
 export function InstallUpdate() {
   return window['go']['main']['App']['InstallUpdate']();
+}
+
+export function RecognizeInk(arg1, arg2) {
+  return window['go']['main']['App']['RecognizeInk'](arg1, arg2);
 }
 
 export function SetClickArea(arg1, arg2, arg3, arg4) {
