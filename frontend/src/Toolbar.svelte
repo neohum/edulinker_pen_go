@@ -902,6 +902,38 @@
                     : 'h-px w-full my-1'} bg-[#4A90E2]/30 shrink-0"
             ></div>
 
+            <!-- Cloud Sync Button -->
+            <div class="relative">
+                <button
+                    class="w-11 h-11 shrink-0 rounded-lg border flex items-center justify-center transition-all bg-[#9B59B6]/10 border-[#9B59B6]/25 hover:bg-[#9B59B6]/20"
+                    on:click={() => {
+                        closeAllMenus();
+                        dispatch("cloudSync");
+                    }}
+                    title="클라우드 연동"
+                >
+                    <svg
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#333333"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+                        <polyline points="12 12 12 16 14 16" />
+                    </svg>
+                </button>
+            </div>
+
+            <div
+                class="{isNearBottom
+                    ? 'w-px h-8 self-center mx-1'
+                    : 'h-px w-full my-1'} bg-[#4A90E2]/30 shrink-0"
+            ></div>
+
             <!-- Settings Button -->
             <div class="relative">
                 <button

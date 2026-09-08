@@ -3,6 +3,7 @@ import {
     recognizeShapeCandidatesMulti,
     mergeShapeCandidates,
     scaleShape,
+    snapShapeToGrid,
     SHAPE_AUTO_APPLY_THRESHOLD,
     SHAPE_MIN_OFFER_THRESHOLD,
     type ShapeCandidate,
@@ -79,6 +80,7 @@ export class InkManager {
     public recognizeShapes: boolean = false;
     public textMode: boolean = false;
     public smartMode: boolean = false;
+    public gridSnappingEnabled: boolean = true;
     public textFont: string = "'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif";
 
     private pendingTextStrokes: StrokePoint[][] = [];
@@ -399,8 +401,9 @@ export class InkManager {
 
         if (top.score >= SHAPE_AUTO_APPLY_THRESHOLD) {
             this.ctx.save(); this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.putImageData(snapshot, 0, 0); this.ctx.restore();
-            this.elements.push({ type: 'shape', id: crypto.randomUUID(), shape: top.shape, strokeConfig: { color: repStroke.color, brushSize: repStroke.brushSize } });
-            this.redrawElements(); this.rememberShapeGuide(top.shape, repStroke);
+            const shapeToApply = this.gridSnappingEnabled ? snapShapeToGrid(top.shape, 20) : top.shape;
+            this.elements.push({ type: 'shape', id: crypto.randomUUID(), shape: shapeToApply, strokeConfig: { color: repStroke.color, brushSize: repStroke.brushSize } });
+            this.redrawElements(); this.rememberShapeGuide(shapeToApply, repStroke);
         } else if (top.score >= SHAPE_MIN_OFFER_THRESHOLD) {
             this.pendingShapeChoice = { snapshot, stroke: repStroke, bbox };
             this.pendingShapeChoiceTopShape = top.shape;
@@ -414,8 +417,9 @@ export class InkManager {
         this.pendingShapeChoice = null; this.pendingShapeChoiceTopShape = null;
         this.ctx.save(); this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ctx.putImageData(snapshot, 0, 0); this.ctx.restore();
         const id = crypto.randomUUID();
-        this.elements.push({ type: 'shape', id, shape, strokeConfig: { color: stroke.color, brushSize: stroke.brushSize } });
-        this.redrawElements(); this.rememberShapeGuide(shape, stroke); this.markDirty();
+        const shapeToApply = this.gridSnappingEnabled ? snapShapeToGrid(shape, 20) : shape;
+        this.elements.push({ type: 'shape', id, shape: shapeToApply, strokeConfig: { color: stroke.color, brushSize: stroke.brushSize } });
+        this.redrawElements(); this.rememberShapeGuide(shapeToApply, stroke); this.markDirty();
         this.lastCommittedElementId = id;
         this.notifyLastCommit();
     }

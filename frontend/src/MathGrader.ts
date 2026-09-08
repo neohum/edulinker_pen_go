@@ -29,7 +29,9 @@ function normalizeMathText(text: string): string {
         .replace(/[×✕xX]/g, '*')
         .replace(/[÷]/g, '/')
         .replace(/[＝]/g, '=')
-        .replace(/[—–ㅡ]/g, '-');
+        .replace(/[—–ㅡ]/g, '-')
+        .replace(/[\[｛{]/g, '(')
+        .replace(/[\]｝}]/g, ')');
 }
 
 function parseHorizontalEquation(text: string): MathGradeResult | null {
@@ -191,6 +193,12 @@ class ExpressionParser {
             this.i++;
             const value = this.parseFactor();
             return value == null ? null : -value;
+        }
+        if (this.peek() === '(') {
+            this.i++;
+            const value = this.parseExpression();
+            if (this.peek() === ')') this.i++;
+            return value;
         }
 
         const start = this.i;

@@ -593,6 +593,24 @@ export function scaleShape(shape: ShapeResult, anchor: Point, scale: number): Sh
     }
 }
 
+/** Snap shape coordinates to a grid of given size. */
+export function snapShapeToGrid(shape: ShapeResult, gridSize: number = 20): ShapeResult {
+    const snap = (v: number) => Math.round(v / gridSize) * gridSize;
+    const snapPt = (p: Point): Point => ({ x: snap(p.x), y: snap(p.y) });
+    switch (shape.type) {
+        case 'line': return { type: 'line', from: snapPt(shape.from), to: snapPt(shape.to) };
+        case 'arrow': return { type: 'arrow', from: snapPt(shape.from), to: snapPt(shape.to) };
+        case 'circle': return { type: 'circle', center: snapPt(shape.center), radius: snap(shape.radius) };
+        case 'ellipse': return { type: 'ellipse', center: snapPt(shape.center), rx: snap(shape.rx), ry: snap(shape.ry) };
+        case 'rectangle': return { type: 'rectangle', x: snap(shape.x), y: snap(shape.y), w: snap(shape.w), h: snap(shape.h) };
+        case 'heart': return { type: 'heart', x: snap(shape.x), y: snap(shape.y), w: snap(shape.w), h: snap(shape.h) };
+        case 'triangle': return { type: 'triangle', vertices: [snapPt(shape.vertices[0]), snapPt(shape.vertices[1]), snapPt(shape.vertices[2])] };
+        case 'rotatedRectangle': return { type: 'rotatedRectangle', vertices: [snapPt(shape.vertices[0]), snapPt(shape.vertices[1]), snapPt(shape.vertices[2]), snapPt(shape.vertices[3])] };
+        case 'parallelogram': return { type: 'parallelogram', vertices: [snapPt(shape.vertices[0]), snapPt(shape.vertices[1]), snapPt(shape.vertices[2]), snapPt(shape.vertices[3])] };
+        case 'unknown': return shape;
+    }
+}
+
 /** Centroid (for shape anchor when resizing). */
 export function shapeCenter(shape: ShapeResult): Point | null {
     switch (shape.type) {
