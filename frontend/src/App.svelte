@@ -8,7 +8,8 @@
   import CaptureOverlay from "./CaptureOverlay.svelte";
   import UpdateToast from "./UpdateToast.svelte";
   import ShapeChooser from "./ShapeChooser.svelte";
-  import { gradeMathText } from "./MathGrader";
+  import { CloudManager } from "./CloudManager";
+  import MathWorker from "./math.worker.ts?worker";
   import {
     GetSavedMonitorIndex,
     RecognizeInk,
@@ -19,8 +20,12 @@
   let draftCanvas: HTMLCanvasElement;
   let inkManager: InkManager | null = null;
   let actionEffects: ActionEffects;
+  let cloudManager: CloudManager | null = null;
 
   let activeTool = "pen";
+  let mathWorker: Worker | null = null;
+  let mathWorkerResolvers = new Map<number, {resolve: Function, reject: Function}>();
+  let mathWorkerId = 0;
   let penColor = "#000000";
   let highlighterColor = "#FFFF00";
   let brushSize = 4;
@@ -48,6 +53,24 @@
   let resizeWidget: { bbox: { x: number; y: number; w: number; h: number } } | null = null;
 
   onMount(async () => {
+    mathWorker = new MathWorker();
+    mathWorker.onmessage = (e) => {
+        const { id, result, error } = e.data;
+        const resolver = mathWorkerResolvers.get(id);
+        if (resolver) {
+            mathWorkerResolvers.delete(id);
+            if (error) resolver.reject(new Error(error));
+            else resolver.resolve(result);
+        }
+    };
+
+    cloudManager = new CloudManager();
+    cloudManager.onStatusChange = (status) => {
+        console.log('[App] Cloud status changed:', status);
+        if (status === 'connected') {
+            actionEffects.triggerConfetti(window.innerWidth / 2, window.innerHeight / 2);
+        }
+    };
     inkManager = new InkManager(mainCanvas, objectCanvas, draftCanvas);
     inkManager.color = penColor;
     inkManager.brushSize = brushSize;
@@ -89,7 +112,9 @@
     }
   });
 
-  onDestroy(() => {});
+  onDestroy(() => {
+    if (mathWorker) mathWorker.terminate();
+  });
 
   let lastSpawnPos = { x: 0, y: 0 };
 
@@ -303,13 +328,29 @@
     applyTextCandidate(i);
   }
 
-  function applyTextCandidate(i: number) {
+  async function gradeMathTextAsync(text: string): Promise<any> {
+    if (!mathWorker) return null;
+    return new Promise((resolve, reject) => {
+        const id = mathWorkerId++;
+        mathWorkerResolvers.set(id, { resolve, reject });
+        mathWorker!.postMessage({ id, text });
+    });
+  }
+
+  async function applyTextCandidate(i: number) {
     if (!inkManager || !textCandidates) return;
     const c = textCandidates;
     // commitRecognizedText restores the pre-stroke snapshot before drawing,
     // so swapping candidates is clean even when text widths differ.
     inkManager.commitRecognizedText(c.list[i], c.x, c.y, c.w, c.h);
-    const grade = gradeMathText(c.list[i]);
+    
+    let grade = null;
+    try {
+        grade = await gradeMathTextAsync(c.list[i]);
+    } catch (err) {
+        console.error('Math grading failed:', err);
+    }
+
     if (grade) {
       inkManager.drawMathGradeResult(grade, c.x, c.y, c.w, c.h);
     } else if (isAngleLabel(c.list[i])) {
@@ -338,8 +379,19 @@
   }
 
   let canvasBgColor = "transparent";
-  function handleBgChange(e: CustomEvent<string>) {
-    canvasBgColor = e.detail;
+  function handleBgChange(event: CustomEvent<string>) {
+    document.body.style.backgroundColor =
+      event.detail === "transparent" ? "transparent" : event.detail;
+  }
+
+  function handleCloudSync() {
+    if (cloudManager) {
+        if (cloudManager.getStatus() === 'connected') {
+            cloudManager.disconnect();
+        } else {
+            cloudManager.connect();
+        }
+    }
   }
 
   function handleCapture() {
@@ -517,6 +569,7 @@
     on:brushSizeChange={handleBrushSizeChange}
     on:clearAll={handleClearAll}
     on:bgChange={handleBgChange}
+    on:cloudSync={handleCloudSync}
     on:toggleClickThrough={toggleClickThrough}
     on:openSettings={() => (showSetup = true)}
     on:capture={handleCapture}
