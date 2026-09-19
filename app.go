@@ -1,3 +1,4 @@
+
 package main
 
 import (
@@ -7,30 +8,32 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
-	"io"
-	"net/http"
-	"os/exec"
-
-	"github.com/blang/semver"
-	"github.com/energye/systray"
-	"github.com/google/go-github/v60/github"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // AppConfig stores persistent user settings.
 type AppConfig struct {
-	MonitorIndex   int    `json:"monitorIndex"` // -1 = all monitors, 0+ = specific monitor index
-	updateFilePath string `json:"-"`            // Path to the downloaded installer, kept in memory only
+	MonitorIndex int `json:"monitorIndex"` // -1 = all monitors, 0+ = specific monitor index
 }
 
 // App struct
 type App struct {
 	ctx    context.Context
-	hwnd   syscall.Handle
+	hwnd   uintptr
 	config AppConfig
+}
+
+// MonitorInfo is the Go-friendly monitor info returned to the frontend.
+type MonitorInfo struct {
+	Index     int    `json:"index"`
+	Name      string `json:"name"`
+	X         int    `json:"x"`
+	Y         int    `json:"y"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	IsPrimary bool   `json:"isPrimary"`
 }
 
 // NewApp creates a new App application struct
@@ -81,27 +84,11 @@ func (a *App) startup(ctx context.Context) {
 	// Initial state: Make non-activating
 	MakeNonActivating(a.hwnd)
 
-	// Check for updates in the background on startup
-	go func() {
-		// Initial check
-		a.CheckForUpdate(false)
+	// Run platform-specific background checks (e.g. self-updater)
+	RunPlatformBackgroundTasks(a)
 
-		// Set up a ticker to check every 6 hours
-		ticker := time.NewTicker(6 * time.Hour)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-a.ctx.Done():
-				return // Context canceled, stop goroutine
-			case <-ticker.C:
-				a.CheckForUpdate(false)
-			}
-		}
-	}()
-
-	// Initialize System Tray
-	go systray.Run(a.onSystrayReady, a.onSystrayExit)
+	// Initialize System Tray (handled per-platform)
+	SetupSystemTray(a)
 }
 
 // domReady is called when the frontend DOM is loaded (transparent CSS is active).
@@ -117,6 +104,21 @@ func (a *App) domReady(ctx context.Context) {
 		// First run: span all monitors, UI will show setup dialog
 		fmt.Println("[App] First run, spanning all monitors")
 		SpanAllMonitors(a.hwnd)
+	}
+
+	// Force transparent background via JS just in case macOS WebView ignores CSS
+	if runtime.Environment(a.ctx).Platform == "darwin" {
+		runtime.WindowExecJS(ctx, `
+			document.documentElement.style.setProperty('background', 'transparent', 'important');
+			document.documentElement.style.setProperty('background-color', 'transparent', 'important');
+			document.body.style.setProperty('background', 'transparent', 'important');
+			document.body.style.setProperty('background-color', 'transparent', 'important');
+			let app = document.getElementById('app');
+			if(app) {
+				app.style.setProperty('background', 'transparent', 'important');
+				app.style.setProperty('background-color', 'transparent', 'important');
+			}
+		`)
 	}
 
 	// Now show the window — transparent CSS is loaded, position is set
@@ -144,201 +146,6 @@ func (a *App) applyMonitorConfig() {
 		fmt.Println("[App] Monitor not found, spanning all")
 		SpanAllMonitors(a.hwnd)
 	}
-}
-
-//go:embed build/windows/icon.ico
-var trayIcon []byte
-
-// CheckForUpdate looks for newer versions on GitHub and asks user if they want to update.
-// manual: true if user clicked the menu item, false if automatic background check.
-func (a *App) CheckForUpdate(manual bool) {
-	owner := "neohum"
-	repo := "edulinker_pen_go"
-
-	fmt.Printf("[Update] Checking for updates on %s/%s... (Current: %s)\n", owner, repo, Version)
-
-	client := github.NewClient(nil)
-	release, _, err := client.Repositories.GetLatestRelease(context.Background(), owner, repo)
-	if err != nil {
-		fmt.Println("[Update] Error checking for update:", err)
-		if manual {
-			runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-				Type:    runtime.ErrorDialog,
-				Title:   "Update Check Failed",
-				Message: fmt.Sprintf("Failed to check for updates: %v", err),
-			})
-		}
-		return
-	}
-
-	latestVersionStr := release.GetTagName()
-	if latestVersionStr != "" && latestVersionStr[0] == 'v' {
-		latestVersionStr = latestVersionStr[1:]
-	}
-
-	currentVer, err := semver.Make(Version)
-	if err != nil {
-		fmt.Println("[Update] Invalid current version format:", err)
-		return
-	}
-
-	latestVer, err := semver.Make(latestVersionStr)
-	if err != nil {
-		fmt.Println("[Update] Invalid remote version format:", err)
-		return
-	}
-
-	if latestVer.LTE(currentVer) {
-		fmt.Println("[Update] App is already up-to-date")
-		if manual {
-			runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-				Type:    runtime.InfoDialog,
-				Title:   "Up to Date",
-				Message: fmt.Sprintf("You are already using the latest version (v%s).", Version),
-			})
-		}
-		return
-	}
-
-	fmt.Printf("[Update] New version available: v%s\n", latestVer.String())
-
-	// Emit event to frontend instead of prompting via MessageDialog
-	runtime.EventsEmit(a.ctx, "update-status", map[string]string{
-		"status":  "available",
-		"version": latestVer.String(),
-		"notes":   release.GetBody(),
-	})
-
-	// Automatically start downloading in background
-	go a.downloadAndInstallUpdate(release)
-}
-
-func (a *App) downloadAndInstallUpdate(release *github.RepositoryRelease) {
-	var installerAsset *github.ReleaseAsset
-	for _, asset := range release.Assets {
-		// Look for the installer specifically
-		if filepath.Ext(asset.GetName()) == ".exe" {
-			installerAsset = asset
-			break // in our case, there is usually only one .exe asset
-		}
-	}
-
-	if installerAsset == nil {
-		runtime.EventsEmit(a.ctx, "update-status", map[string]string{
-			"status": "error",
-			"error":  "No installer executable found in the release.",
-		})
-		return
-	}
-
-	downloadUrl := installerAsset.GetBrowserDownloadURL()
-	fmt.Printf("[Update] Downloading installer silently: %s\n", downloadUrl)
-
-	runtime.EventsEmit(a.ctx, "update-status", map[string]string{
-		"status": "downloading",
-	})
-
-	// Create temp file for the installer
-	tempDir := os.TempDir()
-	tempFilePath := filepath.Join(tempDir, assetName(installerAsset))
-
-	// Download the installer in the background
-	err := downloadFile(tempFilePath, downloadUrl)
-	if err != nil {
-		fmt.Printf("[Update] Error downloading installer: %v\n", err)
-		runtime.EventsEmit(a.ctx, "update-status", map[string]string{
-			"status": "error",
-			"error":  fmt.Sprintf("Failed to download the update: %v", err),
-		})
-		return
-	}
-
-	fmt.Printf("[Update] Download complete: %s\n", tempFilePath)
-
-	// Save the temp file path so the UI can trigger it later
-	a.config.updateFilePath = tempFilePath
-
-	// Notify frontend that update is ready to install silently
-	runtime.EventsEmit(a.ctx, "update-status", map[string]string{
-		"status": "ready",
-	})
-}
-
-// InstallUpdate executes the previously downloaded update installer silently and restarts the app.
-// It should be called from the frontend when the user clicks 'Restart to update'.
-func (a *App) InstallUpdate() {
-	if a.config.updateFilePath == "" {
-		fmt.Println("[Update] No update file available to install.")
-		return
-	}
-
-	fmt.Println("[Update] Launching silent installer...", a.config.updateFilePath)
-	cmd := exec.Command(a.config.updateFilePath, "/S")
-	err := cmd.Start()
-	if err != nil {
-		fmt.Printf("[Update] Failed to start silent installer: %v\n", err)
-		runtime.EventsEmit(a.ctx, "update-status", map[string]string{
-			"status": "error",
-			"error":  fmt.Sprintf("Failed to launch the update installer: %v", err),
-		})
-		return
-	}
-
-	// Exit our application so the installer can overwrite the files
-	os.Exit(0)
-}
-
-func assetName(asset *github.ReleaseAsset) string {
-	if asset.Name != nil {
-		return *asset.Name
-	}
-	return "edulinker-pen-setup.exe"
-}
-
-// downloadFile downloads a URL to a local file
-func downloadFile(filepath string, url string) error {
-	out, err := os.Create(filepath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", resp.Status)
-	}
-
-	_, err = io.Copy(out, resp.Body)
-	return err
-}
-
-func (a *App) onSystrayReady() {
-	systray.SetIcon(trayIcon)
-	systray.SetTooltip("Edulinker Pen")
-
-	// Create menu items
-	mUpdate := systray.AddMenuItem("Check for Updates...", "Check for new versions")
-	systray.AddSeparator()
-	mQuit := systray.AddMenuItem("Exit edulinker-pen", "Quit the whole app")
-
-	mQuit.Click(func() {
-		systray.Quit()
-		runtime.Quit(a.ctx)
-	})
-
-	mUpdate.Click(func() {
-		fmt.Println("Check for update clicked")
-		a.CheckForUpdate(true)
-	})
-}
-
-func (a *App) onSystrayExit() {
-	// Cleanup on exit
 }
 
 // EnableClickThrough makes the main window ignore mouse events.
@@ -426,32 +233,4 @@ func (a *App) CloseApp() {
 // Greet returns a greeting for the given name (Keep for testing the bridge)
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
-}
-
-// GetVersion returns the current version of the application
-func (a *App) GetVersion() string {
-	return Version
-}
-
-// RecognizeInk runs the Windows Ink handwriting recognizer over the given strokes
-// and returns a JSON string with { candidates[], recognizer, x, y, w, h }.
-// strokesJSON: [{"points":[{"x":12,"y":34},...]}, ...]
-// langHint:    BCP-47 (e.g., "ko-KR", "en-US"); empty string = use the first
-//              installed recognizer.
-func (a *App) RecognizeInk(strokesJSON string, langHint string) (string, error) {
-	return RecognizeInkRaw(strokesJSON, langHint)
-}
-
-// DiagnoseInk runs the helper in --diagnose mode and returns its stdout
-// (a human-readable list of installed recognizers). For UI debugging.
-func (a *App) DiagnoseInk() (string, error) {
-	exe, err := findInkExe()
-	if err != nil {
-		return "", err
-	}
-	out, err := runInkDiagnose(exe)
-	if err != nil {
-		return out, err
-	}
-	return out, nil
 }
