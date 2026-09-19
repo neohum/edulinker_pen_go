@@ -1,14 +1,125 @@
+//go:build windows
+
 package main
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/base64"
 	"fmt"
 	"image"
 	"image/png"
+	"os"
 	"syscall"
 	"unsafe"
+
+	"github.com/blang/semver"
+	"github.com/energye/systray"
+	"github.com/rhysd/go-github-selfupdate/selfupdate"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// CheckSingleInstance ensures only one instance of the app runs on Windows.
+func CheckSingleInstance() {
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	createMutex := kernel32.NewProc("CreateMutexW")
+	mutexName := syscall.StringToUTF16Ptr("EduLinkerPen_SingleInstance")
+	_, _, mutexErr := createMutex.Call(0, 0, uintptr(unsafe.Pointer(mutexName)))
+	if mutexErr != nil && mutexErr.(syscall.Errno) == 183 { // ERROR_ALREADY_EXISTS
+		fmt.Println("EduLinker Pen is already running.")
+		os.Exit(0)
+	}
+}
+
+//go:embed build/windows/icon.ico
+var trayIcon []byte
+
+// SetupSystemTray initializes the system tray on Windows.
+func SetupSystemTray(a *App) {
+	go systray.Run(func() {
+		systray.SetIcon(trayIcon)
+		systray.SetTooltip("Edulinker Pen")
+
+		// Create menu items
+		mUpdate := systray.AddMenuItem("Check for Updates...", "Check for new versions")
+		systray.AddSeparator()
+		mQuit := systray.AddMenuItem("Exit edulinker-pen", "Quit the whole app")
+
+		mQuit.Click(func() {
+			systray.Quit()
+			runtime.Quit(a.ctx)
+		})
+
+		mUpdate.Click(func() {
+			fmt.Println("Check for update clicked")
+			a.CheckForUpdate(true)
+		})
+	}, func() {
+		// Cleanup on exit
+	})
+}
+
+// ConfigurePlatformOptions allows OS-specific Wails options.
+func ConfigurePlatformOptions(opts *options.App) {
+	// Keep default options for Windows (options.Fullscreen is fine)
+}
+
+// CheckForUpdate looks for newer versions on GitHub and asks user if they want to update.
+func (a *App) CheckForUpdate(manual bool) {
+	slug := "neohum/edulinker_pen_go"
+
+	fmt.Printf("[Update] Checking for updates on %s... (Current: %s)\n", slug, Version)
+
+	v, _ := semver.Make(Version)
+	latest, err := selfupdate.UpdateSelf(v, slug)
+	if err != nil {
+		fmt.Println("[Update] Error checking for update:", err)
+		if manual {
+			runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+				Type:    runtime.ErrorDialog,
+				Title:   "Update Check Failed",
+				Message: fmt.Sprintf("Failed to check for updates: %v", err),
+			})
+		}
+		return
+	}
+
+	if latest.Version.Equals(v) {
+		fmt.Println("[Update] App is already up-to-date")
+		if manual {
+			runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+				Type:    runtime.InfoDialog,
+				Title:   "Up to Date",
+				Message: fmt.Sprintf("You are already using the latest version (v%s).", Version),
+			})
+		}
+	} else {
+		fmt.Printf("[Update] New version available: v%s\n", latest.Version)
+
+		confirm, _ := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+			Type:          runtime.QuestionDialog,
+			Title:         "Update Available",
+			Message:       fmt.Sprintf("A new version (v%s) is available. Would you like to update now?\n\nRelease notes:\n%s", latest.Version, latest.ReleaseNotes),
+			DefaultButton: "Yes",
+			Buttons:       []string{"Yes", "No"},
+		})
+
+		if confirm == "Yes" {
+			fmt.Println("[Update] Update process finished. User should restart the app.")
+			runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+				Type:    runtime.InfoDialog,
+				Title:   "Update Successful",
+				Message: fmt.Sprintf("Successfully updated to v%s! Please restart the application to apply the changes.", latest.Version),
+			})
+		}
+	}
+}
+
+// RunPlatformBackgroundTasks triggers OS-specific background workers on Wails startup.
+func RunPlatformBackgroundTasks(a *App) {
+	go a.CheckForUpdate(false)
+}
 
 var (
 	gdi32                   = syscall.NewLazyDLL("gdi32.dll")
@@ -69,77 +180,66 @@ type MONITORINFOEX struct {
 	Device  [32]uint16 // CCHDEVICENAME = 32
 }
 
-// MonitorInfo is the Go-friendly monitor info returned to the frontend.
-type MonitorInfo struct {
-	Index     int    `json:"index"`
-	Name      string `json:"name"`
-	X         int    `json:"x"`
-	Y         int    `json:"y"`
-	Width     int    `json:"width"`
-	Height    int    `json:"height"`
-	IsPrimary bool   `json:"isPrimary"`
-}
-
 // getHwnd finds the window handle by its title.
-func getHwnd(windowTitle string) syscall.Handle {
+func getHwnd(windowTitle string) uintptr {
 	titlePtr, _ := syscall.UTF16PtrFromString(windowTitle)
 	hwnd, _, _ := procFindWindow.Call(0, uintptr(unsafe.Pointer(titlePtr)))
-	return syscall.Handle(hwnd)
+	return hwnd
 }
 
 // DisableClickThrough makes the window click-through.
-func DisableClickThrough(hwnd syscall.Handle) {
+func DisableClickThrough(hwnd uintptr) {
 	if hwnd == 0 {
 		return
 	}
 	gwlExStyle := uintptr(GWL_EXSTYLE)
-	style, _, _ := procGetWindowLong.Call(uintptr(hwnd), gwlExStyle)
+	style, _, _ := procGetWindowLong.Call(hwnd, gwlExStyle)
 	style = style &^ WS_EX_TRANSPARENT
-	procSetWindowLong.Call(uintptr(hwnd), gwlExStyle, style)
+	procSetWindowLong.Call(hwnd, gwlExStyle, style)
 }
 
 // EnableClickThrough makes the window click-through.
-func EnableClickThrough(hwnd syscall.Handle) {
+func EnableClickThrough(hwnd uintptr) {
 	if hwnd == 0 {
 		return
 	}
 	gwlExStyle := uintptr(GWL_EXSTYLE)
-	style, _, _ := procGetWindowLong.Call(uintptr(hwnd), gwlExStyle)
+	style, _, _ := procGetWindowLong.Call(hwnd, gwlExStyle)
 	style = style | WS_EX_TRANSPARENT
-	procSetWindowLong.Call(uintptr(hwnd), gwlExStyle, style)
+	procSetWindowLong.Call(hwnd, gwlExStyle, style)
 }
 
 // MakeNonActivating makes the window not steal focus interactively.
-func MakeNonActivating(hwnd syscall.Handle) {
+func MakeNonActivating(hwnd uintptr) {
 	if hwnd == 0 {
 		return
 	}
 	gwlExStyle := uintptr(GWL_EXSTYLE)
-	style, _, _ := procGetWindowLong.Call(uintptr(hwnd), gwlExStyle)
+	style, _, _ := procGetWindowLong.Call(hwnd, gwlExStyle)
 	style = style | WS_EX_NOACTIVATE
-	procSetWindowLong.Call(uintptr(hwnd), gwlExStyle, style)
+	procSetWindowLong.Call(hwnd, gwlExStyle, style)
 }
 
 // SetWindowRegion makes only a specific rectangle of the window interactable and visible.
-func SetWindowRegion(hwnd syscall.Handle, x, y, width, height int) {
+func SetWindowRegion(hwnd uintptr, x, y, width, height int) {
 	if hwnd == 0 {
 		return
 	}
 	hrgn, _, _ := procCreateRectRgn.Call(uintptr(x), uintptr(y), uintptr(x+width), uintptr(y+height))
-	procSetWindowRgn.Call(uintptr(hwnd), hrgn, 1)
+	procSetWindowRgn.Call(hwnd, hrgn, 1)
 }
 
 // ClearWindowRegion removes the window region, restoring full window interactability.
-func ClearWindowRegion(hwnd syscall.Handle) {
+func ClearWindowRegion(hwnd uintptr) {
 	if hwnd == 0 {
 		return
 	}
 	// Passing 0 clears the region
-	procSetWindowRgn.Call(uintptr(hwnd), 0, 1)
+	procSetWindowRgn.Call(hwnd, 0, 1)
 }
 
 // SpanAllMonitors positions and resizes the window to cover the entire virtual screen (all monitors).
-func SpanAllMonitors(hwnd syscall.Handle) {
+func SpanAllMonitors(hwnd uintptr) {
 	if hwnd == 0 {
 		return
 	}
@@ -149,7 +249,7 @@ func SpanAllMonitors(hwnd syscall.Handle) {
 	h, _, _ := procGetSystemMetrics.Call(SM_CYVIRTUALSCREEN)
 
 	procSetWindowPos.Call(
-		uintptr(hwnd),
+		hwnd,
 		HWND_TOPMOST,
 		x, y, w, h,
 		SWP_NOACTIVATE|SWP_SHOWWINDOW,
@@ -157,12 +257,12 @@ func SpanAllMonitors(hwnd syscall.Handle) {
 }
 
 // SetWindowToRect positions the window at the given rectangle (used for single-monitor mode).
-func SetWindowToRect(hwnd syscall.Handle, x, y, w, h int) {
+func SetWindowToRect(hwnd uintptr, x, y, w, h int) {
 	if hwnd == 0 {
 		return
 	}
 	procSetWindowPos.Call(
-		uintptr(hwnd),
+		hwnd,
 		HWND_TOPMOST,
 		uintptr(x), uintptr(y), uintptr(w), uintptr(h),
 		SWP_NOACTIVATE|SWP_SHOWWINDOW,
@@ -179,15 +279,10 @@ func EnumerateMonitors() []MonitorInfo {
 		var info MONITORINFOEX
 		info.Size = uint32(unsafe.Sizeof(info))
 
-		// Get rect from lpRect fallback
-		rect := *(*RECT)(unsafe.Pointer(lpRect))
-
 		ret, _, _ := procGetMonitorInfo.Call(hMonitor, uintptr(unsafe.Pointer(&info)))
-
-		var mi MonitorInfo
 		if ret != 0 {
 			deviceName := syscall.UTF16ToString(info.Device[:])
-			mi = MonitorInfo{
+			mi := MonitorInfo{
 				Index:     idx,
 				Name:      fmt.Sprintf("모니터 %d (%s)", idx+1, deviceName),
 				X:         int(info.Monitor.Left),
@@ -196,52 +291,13 @@ func EnumerateMonitors() []MonitorInfo {
 				Height:    int(info.Monitor.Bottom - info.Monitor.Top),
 				IsPrimary: info.Flags&MONITORINFOF_PRIMARY != 0,
 			}
-		} else {
-			// Fallback if GetMonitorInfoW fails for some reason
-			mi = MonitorInfo{
-				Index:     idx,
-				Name:      fmt.Sprintf("모니터 %d (알 수 없음)", idx+1),
-				X:         int(rect.Left),
-				Y:         int(rect.Top),
-				Width:     int(rect.Right - rect.Left),
-				Height:    int(rect.Bottom - rect.Top),
-				IsPrimary: (rect.Left == 0 && rect.Top == 0), // Best guess
-			}
-			fmt.Printf("[Win32] GetMonitorInfoW failed for monitor %d, using fallback rect\n", idx)
-		}
-
-		// Sanity check dimensions — Windows sometimes returns weird zero-width rects
-		if mi.Width > 0 && mi.Height > 0 {
 			monitors = append(monitors, mi)
 			idx++
-		} else {
-			fmt.Printf("[Win32] Skipping invalid monitor %d with size %dx%d\n", idx, mi.Width, mi.Height)
 		}
-
 		return 1 // Continue enumeration
 	})
 
 	procEnumDisplayMonitors.Call(0, 0, cb, 0)
-
-	// Ultimate Fallback if EnumDisplayMonitors returns nothing (e.g. headless/RDP issues)
-	if len(monitors) == 0 {
-		fmt.Println("[Win32] No monitors found via EnumDisplayMonitors, falling back to SystemMetrics virtual screen")
-		x, _, _ := procGetSystemMetrics.Call(SM_XVIRTUALSCREEN)
-		y, _, _ := procGetSystemMetrics.Call(SM_YVIRTUALSCREEN)
-		w, _, _ := procGetSystemMetrics.Call(SM_CXVIRTUALSCREEN)
-		h, _, _ := procGetSystemMetrics.Call(SM_CYVIRTUALSCREEN)
-
-		monitors = append(monitors, MonitorInfo{
-			Index:     0,
-			Name:      "기본 모니터 (가상 통합)",
-			X:         int(x),
-			Y:         int(y),
-			Width:     int(w),
-			Height:    int(h),
-			IsPrimary: true,
-		})
-	}
-
 	return monitors
 }
 

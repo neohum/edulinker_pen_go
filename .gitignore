@@ -3,3 +3,8 @@ node_modules
 frontend/dist
 tools/inkrecognize/bin
 tools/inkrecognize/obj
+
+.DS_Store
+*.exe
+main
+test_mac

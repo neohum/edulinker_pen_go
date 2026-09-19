@@ -11,7 +11,6 @@
     export let highlighterColor = "#FFFF00";
     export let brushSize = 4;
     export let isExpanded = true;
-    export let isRecognizing = false;
 
     // Computed propery for current tool color
     $: currentColor =
@@ -64,11 +63,14 @@
     let dragDistance = 0;
     let isDragOriginHandle = false;
 
-    let dragStartPos = { x: 0, y: 0 }; // 최초 위치 기록
-    let dragStartTime = 0; // 추가: 탭/드래그 구분을 위한 시간 기록
+    let dragStartPos = { x: 0, y: 0 }; // 최초 클릭 위치 저장용
 
-    // Reactive statement to check if we are near the bottom of the screen
-    $: isNearBottom = currentPos.y > window.innerHeight - 150;
+    let innerHeight = window.innerHeight;
+
+    // Reactive statement to check if we are near the bottom of the screen.
+    // The vertical toolbar is about 500px tall. We flip to horizontal
+    // early so the user has plenty of room.
+    $: isNearBottom = currentPos.y > innerHeight - 650;
 
     function handleDragStart(e: MouseEvent | TouchEvent) {
         const target = e.target as HTMLElement;
@@ -101,7 +103,6 @@
 
         dragStart = { x: clientX, y: clientY };
         dragStartPos = { x: clientX, y: clientY }; // 최초 위치 기록
-        dragStartTime = Date.now(); // 최초 시간 기록
 
         // We intentionally DO NOT use pointer capture.
         // Webview2 sometimes swallows native 'click' events if pointer capture is engaged.
@@ -129,8 +130,8 @@
         const totalDx = clientX - dragStartPos.x;
         const totalDy = clientY - dragStartPos.y;
 
-        // 모바일이나 펜 입력시 미세한 흔들림 무시 (임계값을 30으로 증가)
-        if (Math.sqrt(totalDx * totalDx + totalDy * totalDy) > 30) {
+        // 모바일이나 펜 입력시 미세한 흔들림 무시 (임계값을 10으로 증가)
+        if (Math.sqrt(totalDx * totalDx + totalDy * totalDy) > 10) {
             hasDragged = true;
         }
 
@@ -145,15 +146,14 @@
 
         // Apply the new position to the window region after dragging
         if (!isExpanded) {
-            SetClickArea(currentPos.x, currentPos.y, 48, 48);
+            SetClickArea(currentPos.x - 16, currentPos.y - 16, 80, 80);
         }
     }
 
     // Handles the explicitly intent-based clicks/taps on the main handle
     function handleIconClick(e: MouseEvent | TouchEvent) {
-        const timeElapsed = Date.now() - dragStartTime;
-        // Only toggle if not dragged significantly, or if it was a very fast tap (under 250ms)
-        if (!hasDragged || timeElapsed < 250) {
+        // Only toggle if not dragged significantly
+        if (!hasDragged) {
             toggleExpand();
         }
     }
@@ -165,7 +165,7 @@
         if (!isExpanded) {
             closeAllMenus();
             // Wait a tiny bit for the animation to start/finish, or just clip immediately
-            SetClickArea(currentPos.x, currentPos.y, 48, 48);
+            SetClickArea(currentPos.x - 16, currentPos.y - 16, 80, 80);
         } else {
             ClearClickArea();
         }
@@ -178,9 +178,14 @@
     }
 
     onMount(() => {
-        // Init state
+        // Init state: Center the toolbar initially so it's always visible on multi-monitor setups
+        currentPos = {
+            x: Math.max(20, (window.innerWidth / 2) - 30),
+            y: Math.max(20, (window.innerHeight / 2) - 100),
+        };
+
         if (!isExpanded) {
-            SetClickArea(currentPos.x, currentPos.y, 48, 48);
+            SetClickArea(currentPos.x - 16, currentPos.y - 16, 80, 80);
         } else {
             ClearClickArea();
         }
@@ -213,6 +218,7 @@
 
 <!-- Window-level events for smooth dragging without capture -->
 <svelte:window
+    bind:innerHeight={innerHeight}
     on:mousemove={handleDragMove}
     on:mouseup={handleDragEnd}
     on:touchmove={handleDragMove}
@@ -251,7 +257,7 @@
         <div
             class="absolute {isExpanded
                 ? '-inset-1'
-                : 'inset-0'} cursor-pointer z-20 drag-handle"
+                : '-inset-4'} cursor-pointer z-20 drag-handle"
             style="touch-action: none;"
             on:mousedown={handleDragStart}
             on:touchstart={handleDragStart}
@@ -273,22 +279,14 @@
             <!-- Pen Button -->
             <div class="relative">
                 <button
-                    class="w-11 h-11 shrink-0 rounded-lg border flex items-center justify-center transition-all {[
-                        'pen',
-                        'actionpen',
-                        'firework',
-                        'confetti',
-                    ].includes(activeTool)
+                    class="w-11 h-11 shrink-0 rounded-lg border flex items-center justify-center transition-all {activeTool ===
+                        'pen' || activeTool === 'actionpen'
                         ? 'bg-[#4A90E2]/20 border-[#4A90E2]/60 border-[1.5px]'
                         : 'bg-[#4A90E2]/10 border-[#4A90E2]/25 hover:bg-[#4A90E2]/20'}"
                     on:click={() => {
                         if (
-                            [
-                                "pen",
-                                "actionpen",
-                                "firework",
-                                "confetti",
-                            ].includes(activeTool)
+                            activeTool === "pen" ||
+                            activeTool === "actionpen"
                         ) {
                             showPenMenu = !showPenMenu;
                         } else {
@@ -312,34 +310,6 @@
                             <polygon
                                 points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
                             ></polygon>
-                        {:else if activeTool === "shapepen"}
-                            <rect x="3" y="3" width="18" height="18" rx="2" />
-                            <circle cx="12" cy="12" r="4" />
-                        {:else if activeTool === "textpen"}
-                            <path d="M4 7V5h16v2" />
-                            <path d="M9 20h6" />
-                            <path d="M12 5v15" />
-                        {:else if activeTool === "firework"}
-                            <path
-                                d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"
-                            />
-                        {:else if activeTool === "confetti"}
-                            <path d="M5.8 11.3 2 22l10.7-3.79" />
-                            <path d="M4 3h.01" /><path d="M22 8h.01" /><path
-                                d="M15 2h.01"
-                            /><path d="M22 20h.01" />
-                            <path
-                                d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"
-                            />
-                            <path
-                                d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"
-                            />
-                            <path
-                                d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"
-                            />
-                            <path
-                                d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"
-                            />
                         {:else}
                             <path
                                 d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"
@@ -411,134 +381,6 @@
                                 >Action Pen</span
                             >
                         </button>
-                        <button
-                            class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {activeTool ===
-                            'firework'
-                                ? 'bg-[#E74C3C]/20 border-[#E74C3C]/60'
-                                : 'bg-[#E74C3C]/10 border-[#E74C3C]/25 hover:bg-[#E74C3C]/20'}"
-                            on:click={() => {
-                                selectTool("firework");
-                                showPenMenu = false;
-                            }}
-                            title="폭죽 펜"
-                        >
-                            <svg
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="#333333"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            >
-                                <path
-                                    d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"
-                                />
-                            </svg>
-                            <span class="text-sm font-medium whitespace-nowrap"
-                                >폭죽 펜</span
-                            >
-                        </button>
-                        <button
-                            class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {activeTool ===
-                            'confetti'
-                                ? 'bg-[#9B59B6]/20 border-[#9B59B6]/60'
-                                : 'bg-[#9B59B6]/10 border-[#9B59B6]/25 hover:bg-[#9B59B6]/20'}"
-                            on:click={() => {
-                                selectTool("confetti");
-                                showPenMenu = false;
-                            }}
-                            title="꽃가루 펜"
-                        >
-                            <svg
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="#333333"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            >
-                                <path d="M5.8 11.3 2 22l10.7-3.79" />
-                                <path d="M4 3h.01" /><path d="M22 8h.01" /><path
-                                    d="M15 2h.01"
-                                /><path d="M22 20h.01" />
-                                <path
-                                    d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"
-                                />
-                                <path
-                                    d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"
-                                />
-                                <path
-                                    d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"
-                                />
-                                <path
-                                    d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"
-                                />
-                            </svg>
-                            <span class="text-sm font-medium whitespace-nowrap"
-                                >꽃가루 펜</span
-                            >
-                        </button>
-                        <button
-                            class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {activeTool ===
-                            'shapepen'
-                                ? 'bg-[#1ABC9C]/20 border-[#1ABC9C]/60'
-                                : 'bg-[#1ABC9C]/10 border-[#1ABC9C]/25 hover:bg-[#1ABC9C]/20'}"
-                            on:click={() => {
-                                selectTool("shapepen");
-                                showPenMenu = false;
-                            }}
-                            title="도형 펜 (그린 도형을 자동 인식)"
-                        >
-                            <svg
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="#333333"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            >
-                                <rect x="3" y="3" width="18" height="18" rx="2" />
-                                <circle cx="12" cy="12" r="4" />
-                            </svg>
-                            <span class="text-sm font-medium whitespace-nowrap"
-                                >도형 펜</span
-                            >
-                        </button>
-                        <button
-                            class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {activeTool ===
-                            'textpen'
-                                ? 'bg-[#3498DB]/20 border-[#3498DB]/60'
-                                : 'bg-[#3498DB]/10 border-[#3498DB]/25 hover:bg-[#3498DB]/20'}"
-                            on:click={() => {
-                                selectTool("textpen");
-                                showPenMenu = false;
-                            }}
-                            title="글씨 펜 (손글씨를 텍스트로 변환)"
-                        >
-                            <svg
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="#333333"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            >
-                                <path d="M4 7V5h16v2" />
-                                <path d="M9 20h6" />
-                                <path d="M12 5v15" />
-                            </svg>
-                            <span class="text-sm font-medium whitespace-nowrap"
-                                >글씨 펜</span
-                            >
-                        </button>
                     </div>
                 {/if}
             </div>
@@ -574,7 +416,6 @@
                     ? 'bg-[#4A90E2]/20 border-[#4A90E2]/60 border-[1.5px]'
                     : 'bg-[#4A90E2]/10 border-[#4A90E2]/25 hover:bg-[#4A90E2]/20'}"
                 on:click={() => selectTool("eraser")}
-                title="지우개 (잉크 지우기)"
             >
                 <svg
                     width="22"
@@ -591,60 +432,6 @@
                     /><path d="m5.082 11.09 8.828 8.828" />
                 </svg>
             </button>
-
-            <!-- Selector Button -->
-            <button
-                class="w-11 h-11 shrink-0 rounded-lg border flex items-center justify-center transition-all {activeTool ===
-                'selector'
-                    ? 'bg-[#4A90E2]/20 border-[#4A90E2]/60 border-[1.5px]'
-                    : 'bg-[#4A90E2]/10 border-[#4A90E2]/25 hover:bg-[#4A90E2]/20'}"
-                on:click={() => selectTool("selector")}
-                title="선택 (객체 삭제)"
-            >
-                <svg
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#333333"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                >
-                    <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
-                    <path d="M13 13l6 6" />
-                </svg>
-            </button>
-
-            <!-- Convert handwriting -> text (only when text pen is active) -->
-            {#if activeTool === "textpen"}
-                <button
-                    class="w-11 h-11 shrink-0 rounded-lg border flex items-center justify-center transition-all bg-[#3498DB]/20 border-[#3498DB]/60 hover:bg-[#3498DB]/30 disabled:opacity-50 disabled:cursor-wait"
-                    on:click={() => dispatch("convertText")}
-                    disabled={isRecognizing}
-                    title="손글씨 → 텍스트 변환"
-                >
-                    {#if isRecognizing}
-                        <svg
-                            class="animate-spin"
-                            width="20"
-                            height="20"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="#1F6FB2"
-                            stroke-width="2.5"
-                            stroke-linecap="round"
-                        >
-                            <path d="M12 2a10 10 0 0 1 10 10" />
-                        </svg>
-                    {:else}
-                        <span
-                            class="text-[#1F6FB2] font-bold text-base leading-none"
-                            >T<span class="text-xs">↵</span></span
-                        >
-                    {/if}
-                </button>
-            {/if}
 
             <!-- Clear All -->
             <button
@@ -732,14 +519,12 @@
                     >
                         <rect
                             x="3"
-                            y="4"
+                            y="3"
                             width="18"
-                            height="12"
+                            height="18"
                             rx="2"
                             ry="2"
                         />
-                        <path d="M12 16v5" />
-                        <path d="M8 21h8" />
                     </svg>
                 </button>
                 {#if showBgMenu}
@@ -892,38 +677,6 @@
                             d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
                         />
                         <circle cx="12" cy="13" r="4" />
-                    </svg>
-                </button>
-            </div>
-
-            <div
-                class="{isNearBottom
-                    ? 'w-px h-8 self-center mx-1'
-                    : 'h-px w-full my-1'} bg-[#4A90E2]/30 shrink-0"
-            ></div>
-
-            <!-- Cloud Sync Button -->
-            <div class="relative">
-                <button
-                    class="w-11 h-11 shrink-0 rounded-lg border flex items-center justify-center transition-all bg-[#9B59B6]/10 border-[#9B59B6]/25 hover:bg-[#9B59B6]/20"
-                    on:click={() => {
-                        closeAllMenus();
-                        dispatch("cloudSync");
-                    }}
-                    title="클라우드 연동"
-                >
-                    <svg
-                        width="22"
-                        height="22"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="#333333"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
-                        <polyline points="12 12 12 16 14 16" />
                     </svg>
                 </button>
             </div>

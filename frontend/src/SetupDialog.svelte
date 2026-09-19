@@ -65,7 +65,7 @@
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
-    class="fixed inset-0 z-[9999] flex items-start justify-center pt-16 bg-black/50 pointer-events-auto"
+    class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 pointer-events-auto"
     on:click|self={() => dispatch("close")}
 >
     <div
