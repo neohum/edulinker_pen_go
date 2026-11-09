@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "harness": {
+      "command": "node",
+      "args": [
+        "scripts/loop/mcp-harness.ts"
+      ],
+      "env": {}
+    },
+    "agent-desktop": {
+      "command": "agent-desktop",
+      "args": [
+        "mcp"
+      ],
+      "env": {}
+    },
+    "codebase-memory": {
+      "command": "codebase-memory-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}
